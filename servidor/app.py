@@ -1,13 +1,9 @@
-# app.py (Microserviço 2)
-
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import pika
-import time
 
 app = Flask(__name__)
 
-# Função para estabelecer conexão com o RabbitMQ
-def connect_to_rabbit():
+def conectar_rabbit():
     try:
         connection_parameters = pika.ConnectionParameters(
             host="rabbitmq",
@@ -17,7 +13,6 @@ def connect_to_rabbit():
                 password="guest"
             )
         )
-        # Estabelecendo a conexão
         connection = pika.BlockingConnection(connection_parameters)
         channel = connection.channel()
         print("Conectado ao RabbitMQ")
@@ -26,31 +21,50 @@ def connect_to_rabbit():
         print(f"Falha ao conectar ao RabbitMQ: {str(e)}")
         return None, None
 
-# Tentar conectar ao RabbitMQ
-
-
-
-
 @app.route('/notificar', methods=['POST'])
 def notificar():
-    connection, channel = connect_to_rabbit()
+    connection, channel = conectar_rabbit()
     if channel == None:
-        return 'erro rba' , 500
-    teste = request.json
-    data = 'deu bommm!!!!'
+        return jsonify({"error": "Falha ao conectar ao RabbitMQ"}), 500
+
+    channel.queue_declare(queue='data_queue', durable=True)
+    mensagem = request.json.get('mensagem')
+
     try:
         channel.basic_publish(
             exchange='',
             routing_key='data_queue',
-            body=data,
+            body=mensagem,
             properties=pika.BasicProperties(
                 delivery_mode=2,
             )
         )
         connection.close()
-        return 'Mensagem enviada com sucesso!'
+        return jsonify({"message": "Mensagem enviada com sucesso!"}), 200
     except Exception as e:
-        return f"Erro ao enviar mensagem: {str(e)}", 500
+        return jsonify({"error": f"Erro ao enviar mensagem: {str(e)}"}), 500
+
+@app.route('/consumir', methods=['GET'])
+def consumir():
+    connection, channel = conectar_rabbit()
+    if channel == None:
+        return jsonify({"error": "Falha ao conectar ao RabbitMQ"}), 500
+
+    method_frame, header_frame, body = channel.basic_get(queue='data_queue')
+
+    if method_frame:
+        channel.basic_ack(method_frame.delivery_tag)
+        mensagem = body.decode('utf-8')
+        __fechar_conexao(channel, connection)
+        print(f"Mensagem consumida: {mensagem}")
+        return jsonify({"mensagem": mensagem}), 200
+    else:
+        __fechar_conexao(channel, connection)
+        return jsonify({"message": "Nenhuma mensagem encontrada na fila"}), 200
+
+def __fechar_conexao(channel, connection):
+    channel.close()
+    connection.close()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)

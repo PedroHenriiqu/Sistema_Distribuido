@@ -6,8 +6,7 @@ app = Flask(__name__)
 @app.route('/pagar', methods=['POST'])
 def pagar():
     try:
-        # Enviar requisição para o Microserviço 2
-        response = requests.post('http://localhost:5001/notificar', json=request.json)
+        response = requests.post('http://servidor:5001/notificar', json=request.json)
         return jsonify({"message": "Notificação enviada com sucesso", "response": response.json()}), 200
     except Exception as e:
         return jsonify({"error": "Erro ao enviar notificação", "details": str(e)}), 500
